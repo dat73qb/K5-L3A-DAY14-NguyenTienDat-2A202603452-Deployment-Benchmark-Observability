@@ -2,7 +2,7 @@
 
 > **Họ tên:** Nguyễn Tiến Đạt  
 > **MSSV:** 2A202603452  
-> **Lớp:** K5-L3A  
+> **Lớp:** L3A  
 
 ---
 
@@ -83,7 +83,26 @@ Client ──▶ [nginx :80/:443] ──▶ [agent :8000] ──▶ [redis :6379
 
 ## Part 3: Cloud Deployment
 
-*(Sẽ cập nhật ở CP6 sau khi deploy agent Part 6 lên cloud và đọc pipeline Cloud Run)*
+### Exercise 3.2: Render Deployment
+- **Public URL:** https://k5-l3a-day14-nguyentiendat-2a202603452.onrender.com
+- **Platform:** Render (Web Service chạy Docker từ `06-lab-complete/` + Render Key Value / Redis)
+- **Kiểm tra tự động:** `/health` → `200`, `/ready` → `200`, `POST /ask` (không key) → `401`, `POST /ask` (có `X-API-Key`) → `200`.
+- **Screenshots:** [dashboard.png](screenshots/dashboard.png), [running.png](screenshots/running.png), [test.png](screenshots/test.png).
+
+### So sánh `railway.toml` và `render.yaml`
+| Tiêu chí | `railway.toml` | `render.yaml` |
+|---|---|---|
+| **Định dạng & Mục đích** | TOML ngắn gọn, cấu hình cho **1 service** hiện tại trong thư mục (`[build]`, `[deploy]`). | YAML dạng **Blueprint (IaC)**, có thể khai báo **nhiều services** (`web`, `redis`...) cùng lúc trong `services:`. |
+| **Cách chỉ định build** | `builder = "DOCKERFILE"` trong `[build]`. | `runtime: docker` trong từng service. |
+| **Health check** | `healthcheckPath = "/health"` trong `[deploy]`. | `healthCheckPath: /health` trong service. |
+| **Quản lý biến môi trường & secret** | Thường set riêng qua Railway Dashboard hoặc `railway variables set` (ít khai báo trực tiếp trong `railway.toml`). | Hỗ trợ khai báo trực tiếp trong `envVars:` và xử lý secret an toàn bằng `generateValue: true` (tự sinh key) hoặc `sync: false` (nhập tay trên dashboard, không lộ vào Git). |
+
+### Exercise 3.3: GCP Cloud Run CI/CD Pipeline (`03-cloud-deployment/production-cloud-run/`)
+Khi push code lên nhánh `main`, Google Cloud Build tự động chạy pipeline 4 bước theo `cloudbuild.yaml`:
+1. **`test`:** Dùng container `python:3.11-slim`, cài `requirements.txt` và `pytest`, chạy `pytest tests/ -v` để đảm bảo test pass trước khi build.
+2. **`build`:** Build Docker image với tag theo `$COMMIT_SHA` và `latest` (tận dụng `--cache-from` để tăng tốc).
+3. **`push`:** Đẩy các image tag lên Google Container Registry (`gcr.io/$PROJECT_ID/ai-agent`).
+4. **`deploy`:** Gọi `gcloud run deploy` triển khai image `$COMMIT_SHA` lên Cloud Run (`asia-southeast1`), cấu hình `--min-instances=1` (tránh cold start), `--max-instances=10`, memory `512Mi`, và lấy secret an toàn từ **Secret Manager** (`--set-secrets`). File `service.yaml` định nghĩa cấu hình Knative Service tương ứng (tối đa 80 concurrent requests/instance, `livenessProbe` `/health` và `startupProbe` `/ready`).
 
 ---
 
